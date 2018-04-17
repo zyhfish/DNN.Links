@@ -31,6 +31,7 @@ Imports DotNetNuke.Entities.Users
 Imports System.Collections.Generic
 Imports DotNetNuke.Entities.Users.Social
 Imports System.Linq
+Imports System.Threading
 Imports Telerik.Web.UI
 
 Namespace DotNetNuke.Modules.Links
@@ -99,13 +100,13 @@ Namespace DotNetNuke.Modules.Links
         Public ReadOnly Property FolderInfo() As DotNetNuke.Services.FileSystem.FolderInfo
             Get
 
-                Dim result As DotNetNuke.Services.FileSystem.FolderInfo = Nothing
+                Dim result As DotNetNuke.Services.FileSystem.IFolderInfo = Nothing
 
                 Dim cont As New DotNetNuke.Services.FileSystem.FolderController
 
                 If Me.FolderId <> Null.NullInteger Then
 
-                    result = cont.GetFolderInfo(Me.PortalId, Me.FolderId)
+                    result = FolderManager.Instance.GetFolder(Me.FolderId)
 
                 End If
 
@@ -119,11 +120,9 @@ Namespace DotNetNuke.Modules.Links
 
                 Dim result As New DotNetNuke.Security.Permissions.FolderPermissionCollection
 
-                Dim cont As New DotNetNuke.Security.Permissions.FolderPermissionController
-
                 If FolderInfo IsNot Nothing Then
 
-                    result = cont.GetFolderPermissionsCollectionByFolderPath(Me.PortalId, FolderInfo.FolderPath)
+                    result = DotNetNuke.Security.Permissions.FolderPermissionController.GetFolderPermissionsCollectionByFolder(Me.PortalId, FolderInfo.FolderPath)
 
                 End If
 
@@ -529,21 +528,18 @@ Namespace DotNetNuke.Modules.Links
 
                     If Me.FileId <> Null.NullInteger Then
 
-                        Dim fileCont As New DotNetNuke.Services.FileSystem.FileController
 
-                        Dim fileInfo As DotNetNuke.Services.FileSystem.FileInfo = fileCont.GetFileById(Me.FileId, Me.PortalId)
+                        Dim fileInfo As DotNetNuke.Services.FileSystem.IFileInfo = FileManager.Instance.GetFile(Me.FileId)
 
                         If fileInfo IsNot Nothing Then
 
-                            Dim folderCont As New DotNetNuke.Services.FileSystem.FolderController
-
-                            Dim folderInfo As DotNetNuke.Services.FileSystem.FolderInfo = folderCont.GetFolderInfo(Me.PortalId, fileInfo.FolderId)
+                            Dim folderInfo As DotNetNuke.Services.FileSystem.IFolderInfo = FolderManager.Instance.GetFolder(fileInfo.FolderId)
 
                             If folderInfo IsNot Nothing Then
 
                                 If DotNetNuke.Security.Permissions.FolderPermissionController.HasFolderPermission(Me.PortalId, folderInfo.FolderPath, "READ") Then
 
-                                    FileSystemUtils.DownloadFile(PortalSettings, Me.FileId, False, True)
+                                    DownloadFile(GetFolderPortalID(PortalSettings), Me.FileId, False, True)
 
                                 End If
 
@@ -555,7 +551,7 @@ Namespace DotNetNuke.Modules.Links
 
                     Dim roleController As New DotNetNuke.Security.Roles.RoleController
                     Dim objLinks As New LinkController
-                    Dim roles = roleController.GetUserRoles(Me.PortalId, Me.UserId)
+                    Dim roles = GetUserRoles(Me.PortalId, Me.UserId, True)
                     Dim isInARole As Boolean = False
                     Dim linksToShow As New ArrayList
 
@@ -634,9 +630,8 @@ Namespace DotNetNuke.Modules.Links
 
                         Case Enums.ModuleContentTypes.Folder
 
-                            Dim filesCont As New DotNetNuke.Services.FileSystem.FileController
-
-                            Dim arrFiles As ArrayList = FileSystemUtils.GetFilesByFolder(Me.PortalId, Me.FolderId)
+                            Dim folder As IFolderInfo = FolderManager.Instance.GetFolder(Me.FolderId)
+                            Dim arrFiles As IList(Of IFileInfo) = FolderManager.Instance.GetFiles(folder).ToList()
 
                             For Each file As DotNetNuke.Services.FileSystem.FileInfo In arrFiles
 
@@ -982,10 +977,9 @@ Namespace DotNetNuke.Modules.Links
 
                         Case Enums.ModuleContentTypes.Folder
 
-                            Dim fileCont As New DotNetNuke.Services.FileSystem.FileController
-                            Dim fileInfo As DotNetNuke.Services.FileSystem.FileInfo
+                            Dim fileInfo As DotNetNuke.Services.FileSystem.IFileInfo
 
-                            fileInfo = fileCont.GetFileById(Integer.Parse(cboLinks.SelectedItem.Value), Me.PortalId)
+                            fileInfo = FileManager.Instance.GetFile(Integer.Parse(cboLinks.SelectedItem.Value))
 
                             If fileInfo IsNot Nothing Then
                                 desc = Utils.GetFileSizeString(fileInfo.Size)
@@ -1006,7 +1000,9 @@ Namespace DotNetNuke.Modules.Links
                                     desc = "Status: " & "Request " & updatedRelation.Status.ToString()
                                 End If
                             End If
-                            desc &= "<br />Username: " & friendUser.Username & "<br />Displayname: " & friendUser.DisplayName & "<br />Full Name: " & friendUser.FullName
+
+                            Dim fullName As String = friendUser.FirstName & " " & friendUser.LastName
+                            desc &= "<br />Username: " & friendUser.Username & "<br />Displayname: " & friendUser.DisplayName & "<br />Full Name: " & fullName
                     End Select
 
                     If Not String.IsNullOrEmpty(desc) Then
@@ -1092,13 +1088,13 @@ Namespace DotNetNuke.Modules.Links
             If DisplayMode = Consts.DisplayModeDropdown _
             Or DisplayMode = "Y" Then
 
-                DataCache.RemoveCache(ModuleController.CacheKey(TabModuleId))
+                DataCache.RemoveCache(CacheKey(TabModuleId))
 
             End If
 
             If Not IsPostBack Then
 
-                DataCache.RemoveCache(ModuleController.CacheKey(TabModuleId))
+                DataCache.RemoveCache(CacheKey(TabModuleId))
 
             End If
 
@@ -1203,7 +1199,7 @@ Namespace DotNetNuke.Modules.Links
                             .DisplayName = friendInfo.DisplayName
                             .UserFirstName = friendInfo.FirstName
                             .UserLastName = friendInfo.LastName
-                            .UserFullName = friendInfo.FullName
+                            .UserFullName = friendInfo.FirstName & " " & friendInfo.LastName
                             .UserRelationshipID = relation.UserRelationshipId
                         End With
                         If updatedRelation.Status.ToString.Equals("Accepted") Then
@@ -1221,6 +1217,48 @@ Namespace DotNetNuke.Modules.Links
                 Next
             End If
             Return friendSourceList
+        End Function
+
+        Private Function DownloadFile(ByVal PortalId As Integer, ByVal FileId As Integer, ByVal ClientCache As Boolean, ByVal ForceDownload As Boolean) As Boolean
+            Dim download As Boolean = False
+            Dim manager As IFileManager = FileManager.Instance
+            Dim file As IFileInfo = manager.GetFile(FileId)
+            Dim contentDisposition As ContentDisposition = IIF(ForceDownload, ContentDisposition.Attachment, ContentDisposition.Inline)
+
+            If file IsNot Nothing
+                try
+                    manager.WriteFileToResponse(file, contentDisposition)
+                    download = true
+                catch ex As Exception
+                    REM Do Nothing
+                End Try
+            End If
+
+            Return download
+        End Function
+
+        Private Function GetFolderPortalID(Byval settings As PortalSettings) As Integer
+            return IIF(settings.ActiveTab.ParentId = settings.SuperTabId, Null.NullInteger, settings.PortalId)
+        End Function
+
+        Private Function GetUserRoles(Byval portalId As Integer, Byval userId As Integer, Byval includePrivate As Boolean) As ArrayList
+            Dim user As UserInfo
+            If userId <> -1
+                user = UserController.Instance.GetUser(portalId, userId)
+            Else
+                user = new UserInfo
+                user.PortalID = portalId
+                user.UserID = -1
+            End If
+
+            return IIF(user Is Nothing, new ArrayList(), new ArrayList(RoleProvider.Instance().GetUserRoles(user, includePrivate).ToArray()))
+        End Function
+
+        Public Function CacheKey(Byval TabModuleID As Integer) As String
+            Dim strCacheKey = "TabModule:"
+            strCacheKey &= TabModuleID & ":"
+            strCacheKey &= Thread.CurrentThread.CurrentUICulture.ToString()
+            return strCacheKey
         End Function
 
 #End Region

@@ -128,8 +128,6 @@ Namespace DotNetNuke.Modules.Links
                             txtTitle.Text = objLink.Title.ToString
 
                             ctlURL.Url = objLink.Url
-                            ctlURL.ShowDatabase = True
-                            ctlURL.ShowSecure = True
                             'chkGetContent.Checked = objLink.RefreshContent
 
                             Dim urlType As String = LinkController.convertURLType(GetURLType(objLink.Url))

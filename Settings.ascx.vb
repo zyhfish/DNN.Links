@@ -26,6 +26,8 @@ Imports System.Collections.Generic
 Imports DotNetNuke.Security.Permissions
 Imports System.Xml
 Imports System.Linq
+Imports DotNetNuke.Application
+Imports DotNetNuke.Services.FileSystem
 
 Namespace DotNetNuke.Modules.Links
 
@@ -95,8 +97,9 @@ Namespace DotNetNuke.Modules.Links
 
                     trOptView.Visible = Not optControl.SelectedValue = Consts.DisplayModeDropdown
 
-                    If Not String.IsNullOrEmpty(Me.PortalSettings.Version) _
-                    AndAlso Convert.ToInt16(Me.PortalSettings.Version.Substring(0, 1)) > 5 Then
+                    Dim version As String = DotNetNukeContext.Current.Application.Version.ToString(3)
+                    If Not String.IsNullOrEmpty(version) _
+                    AndAlso Convert.ToInt16(version.Substring(0, 1)) > 5 Then
                         optInfo.Items(2).Enabled = True
                     Else
                         optInfo.Items(2).Enabled = False
@@ -210,17 +213,17 @@ Namespace DotNetNuke.Modules.Links
 
                     Dim folderCont As New DotNetNuke.Services.FileSystem.FolderController
 
-                    Dim dic As Generic.Dictionary(Of String, DotNetNuke.Services.FileSystem.FolderInfo) = folderCont.GetFolders(Me.PortalId)
+                    Dim dic As Generic.List(Of  DotNetNuke.Services.FileSystem.IFolderInfo) = FolderManager.Instance.GetFolders(Me.PortalId).ToList()
 
-                    Dim folders As New Generic.List(Of DotNetNuke.Services.FileSystem.FolderInfo)
+                    Dim folders As New Generic.List(Of DotNetNuke.Services.FileSystem.IFolderInfo)
 
                     Dim folderPermissionsController As New FolderPermissionController
 
-                    For Each item As Generic.KeyValuePair(Of String, DotNetNuke.Services.FileSystem.FolderInfo) In dic
+                    For Each folder In dic
 
-                        If FolderPermissionController.HasFolderPermission(Me.PortalId, item.Value.FolderPath, "READ") Then
+                        If FolderPermissionController.HasFolderPermission(Me.PortalId, folder.FolderPath, "READ") Then
 
-                            folders.Add(item.Value)
+                            folders.Add(folder)
 
                         End If
 
